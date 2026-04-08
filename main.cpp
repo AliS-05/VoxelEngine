@@ -67,7 +67,7 @@ int main() {
 
 	Vector3 cubePosition1 = { 0.0f, 10.0f, 0.0f };
 	int index = 0;
-	std::vector<Color> colors = { BEIGE, DARKGREEN , DARKGRAY};
+	std::vector<Color> colors = { BEIGE, WHITE , DARKGRAY};
 	Chunk c = generateChunk(0, 0); //corner at 0,0 expands into quadrant 1
 	chunkVector.push_back(&c);
 	Vector3 curRayPos;
@@ -110,6 +110,51 @@ int main() {
 			}
 		}
 
+		//rmb = place blocks
+		//literally same exact thing but set to 1 ?
+		if(IsMouseButtonPressed(MOUSE_BUTTON_RIGHT)){
+			Ray ray = GetScreenToWorldRay({CENTER_X, CENTER_Y}, camera); //passing Vector2 with center coords
+			//DrawLine3D(Vector3Add(ray.position, (Vector3){0, -1.0f, 0}), Vector3Add(ray.position, Vector3Scale(ray.direction, REACH)), PINK);
+			
+			//traverse ray, Vector3Add(ray.position, Vector3Scale(ray.direction * i)) inside for loop (i < REACH)
+			//if curRayPos.x // 16 == any chunk x && curRayPos.z // 16 == any chunk.worldZ then the ray is inside of that chunk
+			//then use curRayPos.x, y and z % 16 to find local chunk block position
+			for(float i = 0; i < REACH; i += 0.05f){
+				curRayPos = Vector3Add(ray.position, Vector3Scale(ray.direction, i)); //'stepping' along Ray
+				chunkX = (int)floor(curRayPos.x / 16.0f);
+				chunkZ = (int)floor(curRayPos.z / 16.0f);
+				
+				int recX;
+				int recY;
+				int recZ;
+
+				curChunk = findChunk(chunkX, chunkZ);
+				if(curChunk != nullptr){ 
+					int localX = (int)floor(curRayPos.x) - chunkX * 16; // better alternative to simply using modulo (negatives)
+					int localY = (int)floor(curRayPos.y);
+					int localZ = (int)floor(curRayPos.z) - chunkZ * 16;
+
+					  if(localX < 0 || localX >= 16 || 
+					  	localY < 0 || localY >= 16 || 
+					        localZ < 0 || localZ >= 16) {
+						continue; // out of bounds, skip
+					  }
+
+					if(curChunk->blocks[localX][localY][localZ] == 0){
+						//idea keep track of most recent empty block to update once i find solid block
+						recX = localX;	
+						recY = localY;
+						recZ = localZ;
+					}
+					else{ //need to find face of the block selected and then place on top of that face
+						curChunk->blocks[recX][recY][recZ] = 1; 
+						break;
+					} //else solid block, set to 0
+				}
+			}
+		}
+
+	
 		BeginDrawing();
 		ClearBackground(BLACK); 
 		BeginMode3D(camera);
@@ -130,7 +175,7 @@ int main() {
 		}
 		
 
-		if(IsMouseButtonPressed(MOUSE_BUTTON_RIGHT)){
+		if(IsMouseButtonPressed(MOUSE_BUTTON_MIDDLE)){
 			index == 2 ? index = 0 : index++; //staying in bounds of color vec
 		}
 
