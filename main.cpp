@@ -21,6 +21,8 @@ const float GRAVITY = 9.8f;
 const float FLOOR_Y = 0.0f;
 
 static Camera3D camera = { 0 };
+std::vector<Chunk*> chunkVector;
+
 
 void initCamera(){
 	camera.position = (Vector3){ 0.0f, 10.0f, 10.0f }; //3d position
@@ -36,8 +38,10 @@ void updatePos(Vector3& coords, float dt){
 	if(coords.y < FLOOR_Y) { coords.y = 10; velocityY = 0; }
 }
 
-Chunk generateChunk(){
+Chunk generateChunk(int x, int z){
 	Chunk c;
+	c.worldX = x;
+	c.worldZ = z;
 	for(int x = 0; x < 16; x++)
 		for(int y = 0; y < 16; y++)
 			for(int z = 0; z < 16; z++)
@@ -45,6 +49,14 @@ Chunk generateChunk(){
 	return c;
 }
 
+Chunk* findChunk(int x, int z){
+	for(Chunk* c : chunkVector){
+		if(c->worldX == x && c->worldZ == z){
+			return c;
+		}
+	}
+	return nullptr;
+}
 
 int main() {
 	InitWindow(SCREEN_WIDTH, SCREEN_HEIGHT, "raylib locked in super game");
@@ -55,43 +67,82 @@ int main() {
 
 	Vector3 cubePosition1 = { 0.0f, 10.0f, 0.0f };
 	int index = 0;
-	std::vector<Color> colors = { RED, BLUE , GREEN };
-	Chunk c = generateChunk();
-	while (!WindowShouldClose()) {  //esc to exit
+	std::vector<Color> colors = { BEIGE, DARKGREEN , DARKGRAY};
+	Chunk c = generateChunk(0, 0); //corner at 0,0 expands into quadrant 1
+	chunkVector.push_back(&c);
+	Vector3 curRayPos;
+	int chunkX;
+	int chunkZ;
+
+	while(!WindowShouldClose()) {  //esc to exit
+		Chunk* curChunk = nullptr;
 		float dt = GetFrameTime();
 		UpdateCamera(&camera, CAMERA_FREE);
 		//updatePos(cubePosition1, dt);
 
-		//drawing crosshair
-		int crosshairSize = 50;
-		DrawLine(CENTER_X - crosshairSize, CENTER_Y, CENTER_X + crosshairSize, CENTER_Y, WHITE);
-		DrawLine(CENTER_X, CENTER_Y - crosshairSize, CENTER_X, CENTER_Y + crosshairSize, WHITE);
+		if(IsMouseButtonPressed(MOUSE_BUTTON_LEFT)){
+			Ray ray = GetScreenToWorldRay({CENTER_X, CENTER_Y}, camera); //passing Vector2 with center coords
+			//DrawLine3D(Vector3Add(ray.position, (Vector3){0, -1.0f, 0}), Vector3Add(ray.position, Vector3Scale(ray.direction, REACH)), PINK);
+			
+			//traverse ray, Vector3Add(ray.position, Vector3Scale(ray.direction * i)) inside for loop (i < REACH)
+			//if curRayPos.x // 16 == any chunk x && curRayPos.z // 16 == any chunk.worldZ then the ray is inside of that chunk
+			//then use curRayPos.x, y and z % 16 to find local chunk block position
+			for(float i = 0; i < REACH; i += 0.05f){
+				curRayPos = Vector3Add(ray.position, Vector3Scale(ray.direction, i)); //'stepping' along Ray
+				chunkX = (int)floor(curRayPos.x / 16.0f);
+				chunkZ = (int)floor(curRayPos.z / 16.0f);
+
+				curChunk = findChunk(chunkX, chunkZ);
+				if(curChunk != nullptr){ 
+					int localX = (int)floor(curRayPos.x) - chunkX * 16; // better alternative to simply using modulo
+					int localY = (int)floor(curRayPos.y);
+					int localZ = (int)floor(curRayPos.z) - chunkZ * 16;
+
+					  if(localX < 0 || localX >= 16 || 
+					  	localY < 0 || localY >= 16 || 
+					        localZ < 0 || localZ >= 16) {
+						continue; // out of bounds, skip
+					  }
+
+					if(curChunk->blocks[localX][localY][localZ] == 0) continue; //skip empty blocks so the raycast doesnt get stuck behind air
+					else{ curChunk->blocks[localX][localY][localZ] = 0; break;}; //else solid block, set to 0
+				}
+			}
+		}
 
 		BeginDrawing();
 		ClearBackground(BLACK); 
 		BeginMode3D(camera);
 		
-		Ray ray = GetScreenToWorldRay({CENTER_X, CENTER_Y}, camera); //passing Vector2 with center coords
-		DrawLine3D(Vector3Add(ray.position, (Vector3){0, -1.0f, 0}), Vector3Add(ray.position, Vector3Scale(ray.direction, REACH)), PINK);
-
 		for(int x = 0; x < 16; x++){
 			for(int y = 0; y < 16; y++){
 				for(int z = 0; z < 16; z++){
-						if(c.blocks[x][y][z] != 0){
-							DrawCube((Vector3){x, y, z}, 1, 1, 1, colors[index]);
-						}
+					if(c.blocks[x][y][z] != 0){
+						Vector3 visualPos = { (float)x + 0.5f, (float)y + 0.5f, (float)z + 0.5f };
+						DrawCube(visualPos, 1, 1, 1, colors[index]);
+						DrawCubeWires(visualPos, 1, 1, 1, GRAY);
+
+					//	DrawCube((Vector3){x, y, z}, 1, 1, 1, colors[index]);
+					//	DrawCubeWires((Vector3){x, y, z}, 1, 1, 1, GRAY);
 					}
+				}
 			}
 		}
+		
 
-		//DrawCube(cubePosition1, 3.0f, 3.0f, 3.0f, colors[index]);
-
-		if(IsMouseButtonPressed(MOUSE_BUTTON_LEFT)){
+		if(IsMouseButtonPressed(MOUSE_BUTTON_RIGHT)){
 			index == 2 ? index = 0 : index++; //staying in bounds of color vec
 		}
 
+		//DrawCube(cubePosition1, 3.0f, 3.0f, 3.0f, colors[index]);
 		DrawGrid(100, 1.0f);
 		EndMode3D();
+
+		//drawing crosshair last so it's visible at all times
+		int crosshairSize = 25;
+		DrawLine(CENTER_X - crosshairSize, CENTER_Y, CENTER_X + crosshairSize, CENTER_Y, WHITE);
+		DrawLine(CENTER_X, CENTER_Y - crosshairSize, CENTER_X, CENTER_Y + crosshairSize, WHITE);
+
 		EndDrawing();
 	}
 	CloseWindow();        
