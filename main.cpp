@@ -22,7 +22,8 @@ const float FLOOR_Y = 0.0f;
 
 static Camera3D camera = { 0 };
 std::vector<Chunk*> chunkVector;
-
+Chunk* lastChunk = nullptr;
+int lastX = -1, lastY = -1, lastZ = -1;
 
 void initCamera(){
 	camera.position = (Vector3){ 0.0f, 10.0f, 10.0f }; //3d position
@@ -79,9 +80,47 @@ int main() {
 		float dt = GetFrameTime();
 		UpdateCamera(&camera, CAMERA_FREE);
 		//updatePos(cubePosition1, dt);
+		Ray ray = GetScreenToWorldRay({CENTER_X, CENTER_Y}, camera); //passing Vector3 with center coords
+		
+
+		//highlight block currently being looked at
+		for(float i = 0; i < REACH; i += 0.05f){
+			curRayPos = Vector3Add(ray.position, Vector3Scale(ray.direction, i)); //'stepping' along Ray
+			chunkX = (int)floor(curRayPos.x / 16.0f);
+			chunkZ = (int)floor(curRayPos.z / 16.0f);
+
+			curChunk = findChunk(chunkX, chunkZ);
+			if(curChunk != nullptr){ 
+				int localX = (int)floor(curRayPos.x) - chunkX * 16; // better alternative to simply using modulo
+				int localY = (int)floor(curRayPos.y);
+				int localZ = (int)floor(curRayPos.z) - chunkZ * 16;
+
+				if(localX < 0 || localX >= 16 || 
+					localY < 0 || localY >= 16 || 
+					localZ < 0 || localZ >= 16) {
+					continue; 	
+				}
+				if(curChunk->blocks[localX][localY][localZ] == 0) continue;
+
+				// update previous block
+				if(lastChunk != nullptr){
+					if(lastChunk->blocks[lastX][lastY][lastZ] == 2)
+						lastChunk->blocks[lastX][lastY][lastZ] = 1;
+				}
+
+				// highlighting new block 
+				curChunk->blocks[localX][localY][localZ] = 2;
+
+				lastChunk = curChunk;
+				lastX = localX;
+				lastY = localY;
+				lastZ = localZ;
+
+				break;
+			}
+		}
 
 		if(IsMouseButtonPressed(MOUSE_BUTTON_LEFT)){
-			Ray ray = GetScreenToWorldRay({CENTER_X, CENTER_Y}, camera); //passing Vector2 with center coords
 			//DrawLine3D(Vector3Add(ray.position, (Vector3){0, -1.0f, 0}), Vector3Add(ray.position, Vector3Scale(ray.direction, REACH)), PINK);
 			
 			//traverse ray, Vector3Add(ray.position, Vector3Scale(ray.direction * i)) inside for loop (i < REACH)
@@ -98,11 +137,11 @@ int main() {
 					int localY = (int)floor(curRayPos.y);
 					int localZ = (int)floor(curRayPos.z) - chunkZ * 16;
 
-					  if(localX < 0 || localX >= 16 || 
-					  	localY < 0 || localY >= 16 || 
+					if(localX < 0 || localX >= 16 || 
+						localY < 0 || localY >= 16 || 
 					        localZ < 0 || localZ >= 16) {
 						continue; // out of bounds, skip
-					  }
+					}
 
 					if(curChunk->blocks[localX][localY][localZ] == 0) continue; //skip empty blocks so the raycast doesnt get stuck behind air
 					else{ curChunk->blocks[localX][localY][localZ] = 0; break;}; //else solid block, set to 0
@@ -113,7 +152,6 @@ int main() {
 		//rmb = place blocks
 		//literally same exact thing but set to 1 ?
 		if(IsMouseButtonPressed(MOUSE_BUTTON_RIGHT)){
-			Ray ray = GetScreenToWorldRay({CENTER_X, CENTER_Y}, camera); //passing Vector2 with center coords
 			//DrawLine3D(Vector3Add(ray.position, (Vector3){0, -1.0f, 0}), Vector3Add(ray.position, Vector3Scale(ray.direction, REACH)), PINK);
 			
 			//traverse ray, Vector3Add(ray.position, Vector3Scale(ray.direction * i)) inside for loop (i < REACH)
@@ -162,13 +200,18 @@ int main() {
 		for(int x = 0; x < 16; x++){
 			for(int y = 0; y < 16; y++){
 				for(int z = 0; z < 16; z++){
-					if(c.blocks[x][y][z] != 0){
+					if(c.blocks[x][y][z] == 1){
 						Vector3 visualPos = { (float)x + 0.5f, (float)y + 0.5f, (float)z + 0.5f };
 						DrawCube(visualPos, 1, 1, 1, colors[index]);
 						DrawCubeWires(visualPos, 1, 1, 1, GRAY);
 
 					//	DrawCube((Vector3){x, y, z}, 1, 1, 1, colors[index]);
 					//	DrawCubeWires((Vector3){x, y, z}, 1, 1, 1, GRAY);
+					}
+					else if(c.blocks[x][y][z] == 2){
+						Vector3 visualPos = { (float)x + 0.5f, (float)y + 0.5f, (float)z + 0.5f };
+						DrawCube(visualPos, 1, 1, 1, PINK);
+						DrawCubeWires(visualPos, 1, 1, 1, WHITE);
 					}
 				}
 			}
